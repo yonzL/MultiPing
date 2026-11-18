@@ -1,0 +1,15 @@
+# Build output
+/MultiPing.exe
+*.exe
+*.exe~
+
+# Runtime diagnostics
+multiping-debug.log
+*.log
+
+# Temporary captures
+/flash*.png
+/final*.png
+/state_*.png
+/line_*.png
+/scroll*.png

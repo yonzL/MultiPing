@@ -4,7 +4,20 @@ MultiPing 是一个 Windows 原生多主机 ICMP 轮询工具，使用 Go 与
 [walk](https://github.com/lxn/walk) 编写，直接调用 Windows `IcmpSendEcho`：
 不需要管理员权限，也不会为每次探测创建 `ping.exe` 子进程。
 
-![MultiPing](shot.png)
+![MultiPing](resource/shot.png)
+
+## 目录结构
+
+```text
+MultiPing/
+├── src/          Go 源码与测试（package main）
+├── build/        构建输入：app.manifest、app.ico
+├── resource/     运行时数据与文档图片：hosts.csv、shot.png
+├── scripts/      构建脚本：build.ps1
+├── dist/         构建输出（git 忽略）：MultiPing.exe、hosts.csv
+├── go.mod / go.sum
+└── README.md
+```
 
 ## 功能
 
@@ -53,18 +66,27 @@ hostName,hostIP
 # 如果 PATH 中的 go 高于 1.21，强制使用 1.21.13 工具链
 $env:GOTOOLCHAIN = "go1.21.13"
 
-go test ./...
-rsrc -manifest app.manifest -ico app.ico -o rsrc.syso -arch amd64
-go build -ldflags="-H windowsgui" -o MultiPing.exe .
+go test ./src/...
+rsrc -manifest build/app.manifest -ico build/app.ico -o src/rsrc.syso -arch amd64
+New-Item -ItemType Directory -Force dist | Out-Null
+go build -ldflags="-H windowsgui" -o dist/MultiPing.exe ./src
+Copy-Item resource/hosts.csv dist/hosts.csv -Force
 ```
 
-`rsrc.syso` 包含应用清单（Common Controls v6、PerMonitorV2 DPI 感知）和
-`app.ico`，后者同时作为窗口与任务栏图标。
+也可以直接运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+```
+
+`src/rsrc.syso` 包含应用清单（Common Controls v6、PerMonitorV2 DPI 感知）和
+`build/app.ico`，后者同时作为窗口与任务栏图标。构建脚本会重新生成它。
 
 ## 运行
 
 - 支持 Windows 7 SP1 / Server 2008 R2 及以上，包括 Windows Server 2012 R2。
-- 把 `MultiPing.exe` 与 `hosts.csv` 放在同一目录，双击 exe 即可。
+- 构建输出在 `dist/`；把 `dist/MultiPing.exe` 与 `dist/hosts.csv` 放在同一目录，双击 exe 即可。
+  换用其他主机表时，把 CSV 放到 exe 同级或点“浏览…”选择。
 - 界面按 1024×768 目标分辨率设计，窗口会限制在显示器工作区内。
 - ICMP 通过 `iphlpapi.dll` 发送，不需要提权；若防火墙或安全软件拦截 ICMP，
   对应卡片会保持浅灰、不闪绿。

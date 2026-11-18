@@ -7,7 +7,7 @@ import (
 )
 
 func TestPingAllHostsFile(t *testing.T) {
-	specs, _, _, err := loadHostsFile("hosts.csv")
+	specs, _, _, err := loadHostsFile("../resource/hosts.csv")
 	if err != nil {
 		t.Fatal(err)
 	}

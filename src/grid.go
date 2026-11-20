@@ -12,9 +12,9 @@ import (
 const (
 	gridColumnsDefault = 8
 	gridColumnsMin     = 1
-	gridColumnsMax     = 9
+	gridColumnsMax     = 20
 	cardWidthDefault   = 116
-	cardWidthMin       = 72
+	cardWidthMin       = 40
 	cardHeight         = 50
 	cardGap            = 6
 	gridMargin         = 10

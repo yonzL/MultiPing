@@ -35,11 +35,11 @@ const (
 	maxWaitHandles      = 64
 )
 
-// Four event-wait workers are enough for 999 hosts: the workers mostly sleep
+// Two event-wait workers are enough for 999 hosts: the workers mostly sleep
 // in WaitForMultipleObjects, and each worker holds a slice of the in-flight
-// requests. MULTIPING_WORKERS=2 is supported for very small machines.
+// requests. MULTIPING_WORKERS can raise this on larger machines.
 var (
-	asyncWorkers = 4
+	asyncWorkers = 2
 	asyncSlots   = (maxHosts + asyncWorkers - 1) / asyncWorkers
 )
 

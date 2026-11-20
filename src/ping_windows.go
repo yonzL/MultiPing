@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,12 +32,25 @@ const (
 	ipSuccess           = 0
 	pingAttemptCount    = 3
 	icmpReplyBufferSize = 1024
-
-	// 16 workers x 64 slots = 1024 requests in flight, enough for 999 hosts.
-	asyncWorkers = 16
-	asyncSlots   = 64
-	waitTimeout  = uint32(windows.WAIT_TIMEOUT)
+	maxWaitHandles      = 64
 )
+
+// Four event-wait workers are enough for 999 hosts: the workers mostly sleep
+// in WaitForMultipleObjects, and each worker holds a slice of the in-flight
+// requests. MULTIPING_WORKERS=2 is supported for very small machines.
+var (
+	asyncWorkers = 4
+	asyncSlots   = (maxHosts + asyncWorkers - 1) / asyncWorkers
+)
+
+func init() {
+	if raw := os.Getenv("MULTIPING_WORKERS"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 1 && n <= 16 {
+			asyncWorkers = n
+			asyncSlots = (maxHosts + asyncWorkers - 1) / asyncWorkers
+		}
+	}
+}
 
 type echoResult struct {
 	latency time.Duration
@@ -141,7 +156,8 @@ func (p *pinger) worker() {
 		slots[i] = &echoSlot{}
 	}
 	active := 0
-	handles := make([]windows.Handle, 0, len(slots))
+	windowStart := 0
+	handles := make([]windows.Handle, 0, maxWaitHandles)
 
 	for {
 		for active < len(slots) {
@@ -178,24 +194,38 @@ func (p *pinger) worker() {
 			continue
 		}
 
-		handles = handles[:0]
-		for i := 0; i < active; i++ {
-			handles = append(handles, slots[i].event)
+		if windowStart >= active {
+			windowStart = 0
 		}
-		r, err := windows.WaitForMultipleObjects(handles, false, 25)
+		n := active - windowStart
+		if n > maxWaitHandles {
+			n = maxWaitHandles
+		}
+		handles = handles[:0]
+		for i := 0; i < n; i++ {
+			handles = append(handles, slots[windowStart+i].event)
+		}
+		r, err := windows.WaitForMultipleObjects(handles, false, 5)
 		if err != nil {
 			continue
 		}
-		if r == waitTimeout {
+		if r == uint32(windows.WAIT_TIMEOUT) {
+			// Move the 64-handle window so a completion outside the current
+			// window is observed on the next pass.
+			windowStart += n
+			if windowStart >= active {
+				windowStart = 0
+			}
 			continue
 		}
-		idx := int(r - windows.WAIT_OBJECT_0)
+		idx := windowStart + int(r-uint32(windows.WAIT_OBJECT_0))
 		if idx < 0 || idx >= active {
 			continue
 		}
 		if slots[idx].req == nil {
 			// A stale signal from an earlier immediate completion.
 			_ = windows.ResetEvent(slots[idx].event)
+			windowStart = 0
 			continue
 		}
 		p.finish(slots[idx])
@@ -203,6 +233,7 @@ func (p *pinger) worker() {
 		if idx != active {
 			slots[idx], slots[active] = slots[active], slots[idx]
 		}
+		windowStart = 0
 	}
 }
 

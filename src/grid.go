@@ -255,12 +255,14 @@ func (g *gridWidget) stopUpdates() {
 }
 
 func (g *gridWidget) paint(canvas *walk.Canvas, update walk.Rectangle) error {
-	// Paint the whole client area, not just the damaged update rectangle.
-	// With PaintBuffered the update region can be a narrow strip while the
-	// buffered bitmap still contains unpainted (white) areas; scrolling then
-	// exposes them as a blank band and a hard edge above the last painted row.
-	bounds := g.ClientBounds()
-	if err := canvas.FillRectangle(g.bgBrush, bounds); err != nil {
+	// Paint only the damaged/visible rectangle. With 999 hosts the grid is
+	// much taller than the viewport; redrawing every card on each timer tick
+	// dominates CPU time. PaintNormal clips to update, so culling cards here
+	// is safe and still lets the background cover exposed scroll strips.
+	if update.Width <= 0 || update.Height <= 0 {
+		return nil
+	}
+	if err := canvas.FillRectangle(g.bgBrush, update); err != nil {
 		return err
 	}
 
@@ -273,9 +275,18 @@ func (g *gridWidget) paint(canvas *walk.Canvas, update walk.Rectangle) error {
 	width := g.cardWidthSnapshot()
 
 	for i, h := range hosts {
-		g.paintCard(canvas, g.cardRect(i, width), h, paused)
+		rect := g.cardRect(i, width)
+		if !rectanglesIntersect(rect, update) {
+			continue
+		}
+		g.paintCard(canvas, rect, h, paused)
 	}
 	return nil
+}
+
+func rectanglesIntersect(a, b walk.Rectangle) bool {
+	return a.X < b.X+b.Width && b.X < a.X+a.Width &&
+		a.Y < b.Y+b.Height && b.Y < a.Y+a.Height
 }
 
 func (g *gridWidget) paintEmpty(canvas *walk.Canvas) {

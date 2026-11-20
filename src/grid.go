@@ -6,16 +6,18 @@ import (
 	"time"
 
 	"github.com/lxn/walk"
+	"github.com/lxn/win"
 )
 
 const (
-	gridColumns      = 8
-	cardWidthDefault = 116
-	cardWidthMin     = 72
-	cardWidthMax     = 220
-	cardHeight       = 50
-	cardGap          = 6
-	gridMargin       = 10
+	gridColumnsDefault = 8
+	gridColumnsMin     = 1
+	gridColumnsMax     = 9
+	cardWidthDefault   = 116
+	cardWidthMin       = 72
+	cardHeight         = 50
+	cardGap            = 6
+	gridMargin         = 10
 )
 
 var (
@@ -34,7 +36,9 @@ type gridWidget struct {
 	mu             sync.RWMutex
 	hosts          []*Host
 	paused         bool
+	columns        int
 	cardWidth      int
+	scroll         *walk.ScrollView
 	repaintPending bool
 	closed         atomic.Bool
 
@@ -48,7 +52,7 @@ type gridWidget struct {
 }
 
 func newGridWidget(parent walk.Container) (*gridWidget, error) {
-	g := &gridWidget{cardWidth: cardWidthDefault}
+	g := &gridWidget{cardWidth: cardWidthDefault, columns: gridColumnsDefault}
 	cw, err := walk.NewCustomWidget(parent, 0, g.paint)
 	if err != nil {
 		return nil, err
@@ -63,6 +67,14 @@ func newGridWidget(parent walk.Container) (*gridWidget, error) {
 	if err := cw.SetAlignment(walk.AlignHNearVNear); err != nil {
 		return nil, err
 	}
+	cw.MouseWheel().Attach(func(x, y int, button walk.MouseButton) {
+		if g.scroll == nil {
+			return
+		}
+		// The custom-painted grid is a child of the ScrollView, so the wheel
+		// message would otherwise stop here instead of scrolling the page.
+		win.PostMessage(g.scroll.Handle(), win.WM_MOUSEWHEEL, uintptr(uint32(int32(button))), 0)
+	})
 
 	g.fontName = makeFont(parent, 9, walk.FontBold)
 	g.fontSmall = makeFont(parent, 9, 0)
@@ -94,39 +106,69 @@ func makeFont(parent walk.Container, size int, style walk.FontStyle) *walk.Font 
 
 func (g *gridWidget) setSizeFor(hostCount int) {
 	width := g.cardWidthSnapshot()
+	cols := g.columnsSnapshot()
 	var size walk.Size
 	if hostCount <= 0 {
 		size = walk.Size{
-			Width:  gridMargin*2 + gridColumns*width + (gridColumns-1)*cardGap,
+			Width:  gridMargin*2 + cols*width + (cols-1)*cardGap,
 			Height: 320,
 		}
 	} else {
-		rows := (hostCount + gridColumns - 1) / gridColumns
+		rows := (hostCount + cols - 1) / cols
 		size = walk.Size{
-			Width:  gridMargin*2 + gridColumns*width + (gridColumns-1)*cardGap,
+			Width:  gridMargin*2 + cols*width + (cols-1)*cardGap,
 			Height: gridMargin*2 + rows*cardHeight + (rows-1)*cardGap,
 		}
 	}
 	// Let the window shrink to the 720px minimum even though the cards are
 	// currently laid out for the initial 1024px width; SetAvailableWidth then
 	// computes narrower cards for the new viewport.
-	minWidth := gridMargin*2 + gridColumns*cardWidthMin + (gridColumns-1)*cardGap
+	minWidth := gridMargin*2 + cols*cardWidthMin + (cols-1)*cardGap
 	_ = g.SetMinMaxSize(walk.Size{Width: minWidth, Height: size.Height}, size)
 }
 
-// SetAvailableWidth recalculates the card width so the nine columns fill the
-// available viewport. The grid itself keeps a fixed pixel size for the
-// ScrollView content; it changes only when the window is resized.
+func (g *gridWidget) SetScrollView(sv *walk.ScrollView) {
+	g.scroll = sv
+}
+
+// SetColumns changes the grid density (1-9 cards per row). The card width is
+// recalculated from the current viewport by the caller after this returns.
+func (g *gridWidget) SetColumns(columns int) {
+	if columns < gridColumnsMin {
+		columns = gridColumnsMin
+	}
+	if columns > gridColumnsMax {
+		columns = gridColumnsMax
+	}
+	g.mu.Lock()
+	if g.columns == columns {
+		g.mu.Unlock()
+		return
+	}
+	g.columns = columns
+	hostCount := len(g.hosts)
+	g.mu.Unlock()
+	g.setSizeFor(hostCount)
+	_ = g.Invalidate()
+}
+
+func (g *gridWidget) columnsSnapshot() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.columns
+}
+
+// SetAvailableWidth recalculates the card width so the current number of
+// columns fills the available viewport. The grid itself keeps a fixed pixel
+// size for the ScrollView content; it changes only when the window is resized.
 func (g *gridWidget) SetAvailableWidth(available int) {
 	if available < 600 {
 		return
 	}
-	width := (available - 2*gridMargin - (gridColumns-1)*cardGap) / gridColumns
+	cols := g.columnsSnapshot()
+	width := (available - 2*gridMargin - (cols-1)*cardGap) / cols
 	if width < cardWidthMin {
 		width = cardWidthMin
-	}
-	if width > cardWidthMax {
-		width = cardWidthMax
 	}
 
 	g.mu.Lock()
@@ -231,7 +273,7 @@ func (g *gridWidget) paint(canvas *walk.Canvas, update walk.Rectangle) error {
 	width := g.cardWidthSnapshot()
 
 	for i, h := range hosts {
-		g.paintCard(canvas, cardRect(i, width), h, paused)
+		g.paintCard(canvas, g.cardRect(i, width), h, paused)
 	}
 	return nil
 }
@@ -278,9 +320,10 @@ func (g *gridWidget) paintCard(canvas *walk.Canvas, rect walk.Rectangle, h *Host
 		walk.TextLeft|walk.TextVCenter|walk.TextSingleLine|walk.TextEndEllipsis)
 }
 
-func cardRect(index, width int) walk.Rectangle {
-	col := index % gridColumns
-	row := index / gridColumns
+func (g *gridWidget) cardRect(index, width int) walk.Rectangle {
+	cols := g.columnsSnapshot()
+	col := index % cols
+	row := index / cols
 	return walk.Rectangle{
 		X:      gridMargin + col*(width+cardGap),
 		Y:      gridMargin + row*(cardHeight+cardGap),

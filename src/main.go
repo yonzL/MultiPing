@@ -36,6 +36,7 @@ func (s *pollSession) stop() {
 type app struct {
 	mw        *walk.MainWindow
 	pathEdit  *walk.LineEdit
+	columns   *walk.NumberEdit
 	toggleBtn *walk.PushButton
 	grid      *gridWidget
 	status    *statusWidget
@@ -59,7 +60,7 @@ func main() {
 
 	a.mw.Show()
 	fitWindowToWorkArea(a.mw)
-	a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 44)
+	a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 20)
 
 	defaultPath := defaultHostsPath()
 	_ = a.pathEdit.SetText(defaultPath)
@@ -149,6 +150,28 @@ func (a *app) build() error {
 	_ = browseBtn.SetMinMaxSize(walk.Size{Width: 78, Height: 30}, walk.Size{Width: 78, Height: 30})
 	browseBtn.Clicked().Attach(func() { a.browse() })
 
+	columnsLabel, err := walk.NewLabel(toolbar)
+	if err != nil {
+		return err
+	}
+	columnsLabel.SetText("列数")
+
+	a.columns, err = walk.NewNumberEdit(toolbar)
+	if err != nil {
+		return err
+	}
+	a.columns.SetRange(gridColumnsMin, gridColumnsMax)
+	a.columns.SetDecimals(0)
+	a.columns.SetIncrement(1)
+	a.columns.SetValue(gridColumnsDefault)
+
+	a.columns.SetSpinButtonsVisible(true)
+	_ = a.columns.SetMinMaxSize(walk.Size{Width: 96, Height: 30}, walk.Size{Width: 96, Height: 30})
+	a.columns.ValueChanged().Attach(func() {
+		a.grid.SetColumns(int(a.columns.Value()))
+		a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 20)
+	})
+
 	a.toggleBtn, err = walk.NewPushButton(toolbar)
 	if err != nil {
 		return err
@@ -208,8 +231,9 @@ func (a *app) build() error {
 	if err != nil {
 		return err
 	}
+	a.grid.SetScrollView(sv)
 	mw.SizeChanged().Attach(func() {
-		a.grid.SetAvailableWidth(mw.ClientBounds().Width - 44)
+		a.grid.SetAvailableWidth(mw.ClientBounds().Width - 20)
 	})
 
 	a.status, err = newStatusWidget(mw)

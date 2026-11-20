@@ -60,7 +60,7 @@ func main() {
 
 	a.mw.Show()
 	fitWindowToWorkArea(a.mw)
-	a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 20)
+	a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 10)
 
 	defaultPath := defaultHostsPath()
 	_ = a.pathEdit.SetText(defaultPath)
@@ -169,7 +169,7 @@ func (a *app) build() error {
 	_ = a.columns.SetMinMaxSize(walk.Size{Width: 96, Height: 30}, walk.Size{Width: 96, Height: 30})
 	a.columns.ValueChanged().Attach(func() {
 		a.grid.SetColumns(int(a.columns.Value()))
-		a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 20)
+		a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 10)
 	})
 
 	a.toggleBtn, err = walk.NewPushButton(toolbar)
@@ -233,7 +233,7 @@ func (a *app) build() error {
 	}
 	a.grid.SetScrollView(sv)
 	mw.SizeChanged().Attach(func() {
-		a.grid.SetAvailableWidth(mw.ClientBounds().Width - 20)
+		a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 10)
 	})
 
 	a.status, err = newStatusWidget(mw)
@@ -337,6 +337,7 @@ func (a *app) loadFile(path string, report bool) {
 	a.skipped = skippedRows
 	_ = a.pathEdit.SetText(path)
 	a.grid.SetHosts(hosts)
+	a.grid.SetAvailableWidth(a.mw.ClientBounds().Width - 10)
 	a.status.SetSummary(len(hosts), 0, skippedRows, time.Now())
 	a.status.SetNote("")
 	a.startPolling()
@@ -388,7 +389,7 @@ func (a *app) startPolling() bool {
 		s.wg.Add(1)
 		go func(index int, host *Host) {
 			defer s.wg.Done()
-			// Spread the first probes over ~1s so 400 hosts do not fire at
+			// Spread the first probes over ~1s so 999 hosts do not fire at
 			// exactly the same instant.
 			delay := time.Duration(index%50) * 20 * time.Millisecond
 			a.pollHost(ctx, p, host, delay)

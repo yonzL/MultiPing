@@ -82,7 +82,7 @@ func (b *bannerWidget) paint(canvas *walk.Canvas, update walk.Rectangle) error {
 
 	if bounds.Width >= 700 {
 		right := walk.Rectangle{X: bounds.Width - 312, Y: 7, Width: 298, Height: 20}
-		_ = canvas.DrawText("ICMP · 每秒 1 次 · 最多 400 台", b.subFont, walk.RGB(0x94, 0xA3, 0xB8), right,
+		_ = canvas.DrawText("ICMP · 每秒 1 次 · 最多 999 台", b.subFont, walk.RGB(0x94, 0xA3, 0xB8), right,
 			walk.TextRight|walk.TextVCenter|walk.TextSingleLine|walk.TextEndEllipsis|walk.TextNoPrefix)
 	}
 

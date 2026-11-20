@@ -16,7 +16,7 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
-const maxHosts = 400
+const maxHosts = 999
 
 type hostSpec struct {
 	name string

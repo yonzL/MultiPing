@@ -184,6 +184,11 @@ func (a *app) build() error {
 	if err != nil {
 		return err
 	}
+	// Do not let the scroll view's minimum height grow with the number of
+	// host rows; otherwise a 999-host grid pushes the footer below the
+	// client area. The vertical stretch factor still gives it the remaining
+	// height.
+	_ = sv.SetMinMaxSize(walk.Size{Width: 0, Height: 0}, walk.Size{})
 	// The grid always fits horizontally; disable the unused horizontal
 	// scrollbar so its classic-theme border cannot show through as a line.
 	// Keep the horizontal flag enabled: Walk only marks the scroll view as
@@ -397,6 +402,9 @@ func (a *app) startPolling() bool {
 	}
 	a.setToggle(true)
 	a.status.SetNote("")
+	// Restarting can change the scroll view's minimum size; ask Walk to lay
+	// out the footer again instead of leaving it below the client area.
+	a.mw.RequestLayout()
 	return true
 }
 
@@ -422,6 +430,7 @@ func (a *app) togglePolling() {
 		a.grid.SetPaused(true)
 		a.setToggle(false)
 		a.status.SetNote("已停止")
+		a.mw.RequestLayout()
 		return
 	}
 	a.grid.SetPaused(false)
@@ -453,7 +462,7 @@ func (a *app) pollHost(ctx context.Context, p *pinger, h *Host, initialDelay tim
 
 	for {
 		started := time.Now()
-		latency, ok := p.pingOnce(h.Addr)
+		latency, ok := p.ping(ctx, h.Addr)
 		debugf("probe %s %s -> ok=%v latency=%v", h.Name, h.IP, ok, latency)
 		select {
 		case <-ctx.Done():
